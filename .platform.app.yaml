@@ -1,0 +1,99 @@
+# the name of this particular app, remember that we allow you
+# to create a project out of 1 or more apps, so this gives our
+# Laravel app a name...
+name: app
+type: php:7.2 # SSIA
+size: S
+build:
+  # Same as before, this alerts our system to look for a composer.json
+  # or composer.lock file and install the dependencies defined therein
+  flavor : composer
+# The relationships of the application with services or other applications.
+# The left-hand side is the name of the relationship as it will be exposed
+# to the application in the PLATFORM_RELATIONSHIPS variable. The right-hand
+# side is in the form `<service name>:<endpoint name>`.
+relationships:
+    database: "mysqldb:mysql"
+# basic web configuration for this particular app.  Laravel apps have a
+# "public" folder that serves as the web docroot.
+web:
+  locations:
+    "/":
+      root: "public"
+      index:
+        - index.php
+      allow: true
+      passthru: "/index.php"
+# How much disk space to allot to this app.  
+disk: 2512
+# This is where you define your writable file system paths.  the keys are the
+# paths in your app that need to be writable/uploadable.  The values are always
+# going to be named "shared:files/$WHATEVER_HERE", where "WHATEVER_HERE" can be
+# any arbitrary identifier.
+mounts:
+  # Laravel uses a directory off the root called "storage" for logs and cache.
+  # We don't support specifying nested directories so make these directories
+  # flat beyond "shared:files"
+#   "/storage/app": "shared:files/app"
+  "/storage/app/public": "shared:files/app-public"
+  "/storage/framework/views": "shared:files/framework-views"
+  "/storage/framework/sessions": "shared:files/framework-sessions"
+  "/storage/framework/cache": "shared:files/framework-cache"
+  "/storage/logs": "shared:files/logs"
+  # And another cache directory here.
+  "/bootstrap/cache": "shared:files/bootstrap_cache"
+  "/public/videos": "shared:files/videos"
+  "/public/thumbnails": "shared:files/thumbnails"
+  # "/ffmpeg/sourcecode": "shared:files/sourcecode"
+dependencies:
+  nodejs: 
+    yarn: "*"
+# The hooks that will be performed when the package is deployed.
+hooks:
+    build: |
+      curl -sS https://platform.sh/cli/installer | php
+      npm install
+      rm -rf /app/public/public
+      ln -s /app/storage/app/public /app/public/public
+      ln -s /app/storage/app/public /app/public/storage
+      wget http://johnvansickle.com/ffmpeg/releases/ffmpeg-release-64bit-static.tar.xz
+      tar xf ffmpeg-release-64bit-static.tar.xz
+      mv ffmpeg-4.0.2-64bit-static/* .global/bin
+      rm -rf ffmpeg-4.0.2-64bit-static  ffmpeg-release-64bit-static.tar.gz
+      # mv /app/ffmpeg /app/ffmpeg1
+      # git clone https://git.ffmpeg.org/ffmpeg.git
+    # deploy: |
+    #   cd /app/ffmpeg
+    #   ./configure
+    #   make
+    #   make install
+crons:
+    laravel:
+      spec: '*/1 * * * *'
+      cmd: 'php /app/artisan schedule:run'
+    snapshot:
+        # Take a snapshot automatically every night at 3 am.
+        spec: '0 17 * * *'
+        cmd: |
+            if [ "$PLATFORM_BRANCH" = master ]; then
+                platform snapshot:create --yes --no-wait
+            fi
+    renewcert:
+        # Force a redeploy at 3 am on the 14th and 28th of every month.
+        spec: '0 17 14,28 * *'
+        cmd: |
+            if [ "$PLATFORM_BRANCH" = master ]; then
+                platform redeploy --yes --no-wait
+            fi
+# workers:
+#     queue:
+#         size: 'S'
+#         commands:
+#             start: |
+#                 php /app/artisan schedule:run
+#         disk: 128
+
+variables:
+    php:
+        post_max_size : 64M
+        upload_max_filesize : 64M
